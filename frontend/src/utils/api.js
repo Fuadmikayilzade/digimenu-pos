@@ -1,5 +1,5 @@
 const BASE = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-  ? 'https://digimenu-pos-production.up.railway.app/api'
+  ? 'https://digimenu-pos-production-fde1.up.railway.app/api'
   : '/api'
 
 async function request(path, opts = {}) {
