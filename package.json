@@ -56,7 +56,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "Fuadmikayilzadenpm run electron:dev",
+      "owner": "Fuadmikayilzade",
       "repo": "digimenu-pos"
     }
   }
