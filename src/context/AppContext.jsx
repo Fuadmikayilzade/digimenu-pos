@@ -744,6 +744,17 @@ export function AppProvider({ children }) {
   }, [user?.business_id]) // eslint-disable-line
 
   const handleLogout = useCallback(async () => {
+    // ⚠️ KRİTİK DÜZƆLİŞ (Electron): "çıxış edib yenidən giriş etməyə
+    // çalışanda input xanaları işləmir" bugunun səbəbi bu idi — çıxış
+    // düyməsinin özü (fokusda olan element) DOM-dan silinəndə,
+    // Chromium/Electron-un "hansı element fokusdadır" daxili yaddaşı
+    // bəzən köhnə (artıq silinmiş) elementə "ilişib qalır". Nəticədə
+    // yeni açılan Login ekranındaki HEÇ BİR xana kliklərə/fokusa
+    // reaksiya vermir. Fokusu açıq-aşkar "boşaltmaqla" (blur) bunun
+    // qarşısını alırıq:
+    if (typeof document !== 'undefined' && document.activeElement) {
+      document.activeElement.blur()
+    }
     await supabase.auth.signOut()
     LS.set('pos_user', null)
     localStorage.removeItem('pos_business_id')
