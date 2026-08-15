@@ -1,0 +1,41 @@
+name: Build & Publish DigiMenu POS
+
+# ⚠️ Bu iş axını YALNIZ "v" ilə başlayan bir tag push edildikdə işə
+# düşür (məs. v1.0.1, v1.2.0). Sadə "git push" kifayət etmir — əvvəlcə
+# versiya nömrəsini artırıb TAG yaratmalısınız (aşağıdaki qeydə baxın).
+# Bu, təsadüfən hər commit-də yeni buraxılış yaranmasının qarşısını alır.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    # ⚠️ Git repo-nuzun kökü BİRBAŞA "frontend" qovluğudur (git init
+    # bunu "frontend" daxilində işlətmisiniz) — ona görə əlavə alt-qovluq
+    # yoluna EHTİYAC YOXDUR, package.json birbaşa kökdədir:
+    steps:
+      - name: Kodu çək
+        uses: actions/checkout@v4
+
+      - name: Node.js quraşdır
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Asılılıqları quraşdır
+        run: npm ci
+
+      - name: Build et və GitHub Releases-ə göndər
+        run: npm run electron:publish
+        env:
+          # ⚠️ Bu token GitHub tərəfindən AVTOMATİK verilir — əlavə
+          # bir şey etmənizə ehtiyac yoxdur, sadəcə repo-nun
+          # Settings → Actions → General → Workflow permissions
+          # bölməsində "Read and write permissions" seçili olmalıdır
+          # (əks halda buraxılış yaratmaq icazəsi olmaz):
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

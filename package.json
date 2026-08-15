@@ -1,0 +1,63 @@
+{
+  "name": "digimenu-pos-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "vite build && electron-builder",
+    "electron:publish": "vite build && electron-builder --publish always"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.43.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.1",
+    "vite": "^7.3.1",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0",
+    "electron-updater": "^6.3.9",
+    "concurrently": "^9.0.0",
+    "wait-on": "^8.0.0",
+    "cross-env": "^7.0.3"
+  },
+  "build": {
+    "appId": "az.digimenu.pos",
+    "productName": "DigiMenu POS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "electron/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DigiMenu POS"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Fuadmikayilzadenpm run electron:dev",
+      "repo": "digimenu-pos"
+    }
+  }
+}
