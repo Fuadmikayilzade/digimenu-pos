@@ -1,15 +1,22 @@
 import { fmt, nowDate } from '../utils/helpers'
 import { printReceipt } from '../utils/printReceipt'
+import { useApp } from '../context/AppContext'
 
 export default function ReceiptModal({ receipt, onClose }) {
-  const doPrint = () => printReceipt(receipt)
+  const { user } = useApp()
+  // ⚠️ VACİB: əvvəllər burada "Ləzzət Evi" sərt kodlanmış (hardcoded)
+  // test mətni idi — heç vaxt real biznes adı ilə əvəz olunmayıb.
+  // İndi sahibkar hesabından qeydiyyatdan keçən ƏSL restoran adı
+  // istifadə olunur:
+  const businessName = user?.business_name || 'DigiMenu POS'
+  const doPrint = () => printReceipt({ ...receipt, businessName })
 
   return (
     <div className="modal-bg">
       <div className="receipt">
         <div className="receipt-header">
           <div className="receipt-logo">DigiMenu POS</div>
-          <div className="receipt-sub">Ləzzət Evi · Bakı, Azərbaycan</div>
+          <div className="receipt-sub">{businessName}</div>
           <div className="receipt-id">{receipt.id} · Masa {receipt.table} · {receipt.time}</div>
         </div>
         <div className="receipt-items">

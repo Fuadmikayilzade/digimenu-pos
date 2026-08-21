@@ -228,7 +228,7 @@ export default function PendingOrdersPanel() {
         method: 'online',
         cashGiven: 0,
         time: new Date().toLocaleString('az'),
-        businessName: '',
+        businessName: user?.business_name || 'DigiMenu POS',
       })
       } finally {
         processingTablesRef.current.delete(order.table_id)

@@ -19,7 +19,11 @@ function createWindow() {
     fullscreen: isKitchenMode, // mətbəx rejimində avtomatik tam ekran
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      // ⚠️ DÜZƏLİŞ: bura əvvəllər "preload.js" yazılmışdı, amma fayl
+      // artıq "preload.cjs" adlanır (ES module/CommonJS münaqişəsi
+      // düzəldilərkən adı dəyişdirilmişdi) — bu uyğunsuzluq preload
+      // skriptinin SƏSSİZCƏ heç yüklənməməsinə səbəb olurdu:
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -47,7 +51,7 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow()
 
-  // ⚠️ AVTOMATİK YENİLƆNMƆ: tətbiq açılan kimi yeni versiya olub-olmadığını
+  // ⚠️ AVTOMATİK YENİLƏNMƏ: tətbiq açılan kimi yeni versiya olub-olmadığını
   // yoxlayır. Tapılarsa arxa planda yükləyir, hazır olanda istifadəçidən
   // "indi yenidən başladım" təsdiqi alır (işin ortasında sürprizlə
   // yenidən başlamasın deyə):
@@ -81,3 +85,38 @@ autoUpdater.on('error', (err) => {
 // Renderer prosesindən (React tərəfindən) "yenilənməni yoxla" çağırışı üçün:
 ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdatesAndNotify())
 ipcMain.handle('get-app-version', () => app.getVersion())
+
+// ⚠️ KRİTİK DÜZƏLİŞ: "This app does not support print preview" xətası
+// brauzerdəki adi `window.open()+window.print()` üsulunun Electron-da
+// düzgün işləməməsindən qaynaqlanır — Electron "uşaq" pəncərələrdə
+// (window.open ilə açılanlarda) çapı tam dəstəkləmir. Bunun əvəzinə
+// Electron-un ÖZ NATIVE çap API-sini (`webContents.print()`) istifadə
+// edirik: gizli bir pəncərədə çekin HTML-ini yükləyib, ordan çap edirik:
+ipcMain.handle('print-receipt', async (event, htmlContent) => {
+  return new Promise((resolve) => {
+    const printWin = new BrowserWindow({
+      show: false,
+      webPreferences: { contextIsolation: true, nodeIntegration: false },
+    })
+
+    printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent))
+
+    printWin.webContents.on('did-finish-load', () => {
+      printWin.webContents.print(
+        { silent: false, printBackground: true, margins: { marginType: 'none' } },
+        (success, errorType) => {
+          if (!success && errorType !== 'cancelled') {
+            console.error('Çap xətası:', errorType)
+          }
+          printWin.close()
+          resolve({ success, errorType: errorType || null })
+        }
+      )
+    })
+
+    printWin.webContents.on('did-fail-load', () => {
+      printWin.close()
+      resolve({ success: false, errorType: 'load-failed' })
+    })
+  })
+})
