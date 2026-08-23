@@ -28,6 +28,36 @@ const initTables = (count = TABLE_COUNT_DEFAULT) => {
 export function AppProvider({ children }) {
   // ── Auth ─────────────────────────────────────────────────────────
   const [user, setUser] = useState(() => LS.get('pos_user', null))
+
+  // ⚠️ KRİTİK DÜZƆLİŞ: "Masa X sinxronizasiya xətası — RLS siyasəti
+  // pozulur" bugunun kök səbəbi bu idi — `pos_user` localStorage-də
+  // saxlanılır və tətbiq hər açılışda YENİDƆN SORĞULANMADAN istifadə
+  // edir. Əgər bu istifadəçinin bağlı olduğu biznes sonradan silinibsə
+  // (məs. dublikat təmizliyi zamanı) və ya işçi hesabı deaktiv
+  // edilibsə, köhnə `business_id` artıq HEÇ BİR RLS siyasətini
+  // ödəmir — bütün yazılar səssizcə rədd olunur. İndi tətbiq açılan
+  // kimi bu keşin HƆLƆ ETİBARLI olduğunu təsdiqləyirik; deyilsə,
+  // istifadəçini avtomatik çıxarıb yenidən giriş tələb edirik:
+  useEffect(() => {
+    if (!user?.id || !user?.business_id) return;
+    (async () => {
+      const { data: biz } = await supabase.from('businesses').select('id').eq('id', user.business_id).maybeSingle();
+      if (biz) return; // etibarlıdır, hər şey qaydasındadır
+
+      // ⚠️ Sahibkar deyilsə, işçi hesabı üçün də ayrıca yoxlayaq
+      // (business_id fərqli mənbədən — staff_accounts-dan gələ bilər):
+      if (user.staff_account_id) {
+        const { data: staffRow } = await supabase.from('staff_accounts')
+          .select('id, business_id, is_active').eq('id', user.staff_account_id).maybeSingle();
+        if (staffRow?.is_active && staffRow.business_id === user.business_id) return; // etibarlıdır
+      }
+
+      console.warn('⚠️ Keşlənmiş biznes məlumatı köhnəlib — yenidən giriş tələb olunur')
+      LS.set('pos_user', null)
+      setUser(null)
+    })();
+  }, []); // eslint-disable-line
+
   const [branches, setBranches] = useState([])
   // ⚠️ KRİTİK DÜZƏLİŞ: `activeBranchId` əvvəllər HƏR CİHAZIN öz
   // localStorage-ında sərbəst saxlanılırdı (dropdown vasitəsilə seçilə
@@ -135,6 +165,17 @@ export function AppProvider({ children }) {
   }
 
   const syncTimers = useRef({})
+  // ⚠️ KRİTİK DÜZƆLİŞ: "masa X sinxronizasiya xətası verir, sifariş
+  // yox olur" bugunun ƏSL səbəbi bu idi — 15 saniyəlik ehtiyat "tam
+  // yeniləmə" (aşağıda) serverdən gələn datanı HEÇ BİR MÜHAFİZƆSİZ
+  // yerli vəziyyətin ÜZƆRİNƆ yazırdı. Əgər Supabase-ə yazı UĞURSUZ
+  // olsaydı, serverdə köhnə/boş sətir qalırdı — 15 saniyə içində bu
+  // "boş" server datası yerli (hələ təsdiqlənməmiş) əlavəni SİLİRDİ.
+  // İndi hansı masaların sinxronizasiyası HƆLƆ TAMAMLANMAYIB (ya da
+  // son cəhd uğursuz olub) izlənilir — bu masalar 15 saniyəlik
+  // yeniləmədə TOXUNULMAZ qalır, yalnız uğurlu sinxronizasiyadan
+  // sonra "təmiz" sayılır:
+  const pendingSyncTables = useRef(new Set())
 
   // Bu, HƏQİQİ yazı məntiqidir (debounce OLMADAN) — həm adi debounce-lu
   // `syncActiveOrder`, həm də dərhal yazan `flushActiveOrderSync`
@@ -142,6 +183,8 @@ export function AppProvider({ children }) {
   const performActiveOrderSync = async (tableNumber, data) => {
     if (!user?.business_id) return
     if (!data.items.length) return // boşdursa yazma, ayrıca silinir
+
+    pendingSyncTables.current.add(String(tableNumber))
 
     let findQ = supabase.from('active_orders').select('id')
       .eq('business_id', user.business_id).eq('table_number', String(tableNumber))
@@ -151,7 +194,7 @@ export function AppProvider({ children }) {
     if (findErr) {
       console.error('Sifariş axtarılmadı:', findErr.message)
       toast(`Masa ${getTableLabel(tableNumber)}: sinxronizasiya xətası — ${findErr.message}`, 'error', 6000)
-      return
+      return // ⚠️ pendingSyncTables-dan SİLİNMİR — masa "qorunan" qalır
     }
 
     const payload = {
@@ -182,8 +225,12 @@ export function AppProvider({ children }) {
     if (error) {
       console.error('Sifariş sinxronlaşmadı:', error.message)
       toast(`Masa ${getTableLabel(tableNumber)}: sinxronizasiya xətası — ${error.message}`, 'error', 6000)
-      return
+      return // ⚠️ pendingSyncTables-dan SİLİNMİR — masa "qorunan" qalır
     }
+
+    // ✅ Uğurlu sinxronizasiya — bu masa artıq serverlə "razılaşır",
+    // 15 saniyəlik yeniləmə ondan bir daha çəkinməli deyil:
+    pendingSyncTables.current.delete(String(tableNumber))
 
     // ⚠️ "GÜZGÜ" YAZISI: Müştərinin öz QR-ından açdığı "Ödə/Sifarişlərim"
     // səhifəsi YALNIZ `pending_orders`-i oxuyur — kassirin özü POS-dan
@@ -335,23 +382,22 @@ export function AppProvider({ children }) {
       q = activeBranchId ? q.eq('branch_id', activeBranchId) : q.is('branch_id', null)
       q.then(({ data }) => {
         setTables(prev => {
-          // ⚠️ ƏVVƆLKİ KOD burada "naməlum" açarları (initTables()-in
-          // əhatə etmədiyi masa nömrələrini, məs. digər filialın 9-20
-          // aralığındaki masalarını) köhnə `prev`-dən SAXLAYIRDI. Filial
-          // dəyişəndə bu, ƏVVƆLKİ filialın "dolu" statuslu masa
-          // məlumatının YENİ filiala SIZMASINA səbəb olurdu — filial B-yə
-          // keçəndə B-nin əslində boş olan masaları A-dan qalma köhnə
-          // cart data ucbatından "dolu" görünürdü. İndi filial dəyişəndə
-          // (bu effekt YALNIZ activeBranchId dəyişəndə işə düşür) state
-          // TAM sıfırlanır — yalnız TƏZƏ yüklənən active_orders məlumatı
-          // etibar ediləndir:
+          // ⚠️ Sinxronizasiyası HƆLƆ TAMAMLANMAYIB (ya da uğursuz olub)
+          // masaları toxunulmaz saxlayırıq — server datası onlar üçün
+          // KÖHNƆ sayılır, yerli versiya daha etibarlıdır:
           const next = { ...initTables() }
           ;(data || []).forEach(row => {
+            if (pendingSyncTables.current.has(String(row.table_number))) return
             next[row.table_number] = {
               items: row.items || [], note: row.note || '', discount: Number(row.discount) || 0,
               staffUserId: row.staff_user_id, staffId: row.staff_id, staffName: row.staff_name,
               openedByUserId: row.opened_by_user_id, openedByName: row.opened_by_name,
             }
+          })
+          // "Qorunan" masaların CARİ yerli vəziyyətini saxlayırıq
+          // (initTables()-in defolt boş halı ilə əvəz olunmasın deyə):
+          pendingSyncTables.current.forEach(tblNum => {
+            if (prev[tblNum]) next[tblNum] = prev[tblNum]
           })
           return next
         })

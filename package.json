@@ -57,7 +57,8 @@
     "publish": {
       "provider": "github",
       "owner": "Fuadmikayilzade",
-      "repo": "digimenu-pos"
+      "repo": "digimenu-pos",
+      "draft": false
     }
   }
 }
