@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { k: 'pos',       label: 'POS',    icon: '🛒', role: 'pos'     },
   { k: 'kitchen',   label: 'Mətbəx', icon: '🍳', role: 'kitchen' },
   { k: 'orders',    label: 'Çeklər', icon: '📋', role: 'pos'     },
+  { k: 'archive',   label: 'Arxiv',  icon: '🗄️', role: 'reports' },
   { k: 'dashboard', label: 'Statistika', icon: '📊', role: 'reports' },
   { k: 'reports',   label: 'Hesabat', icon: '📈', role: 'reports' },
 ]

@@ -919,7 +919,10 @@ export function AppProvider({ children }) {
           id: o.id, table: o.tables?.number || '-',
           items: (o.order_items || []).map(it => ({ name: it.name || '', price: Number(it.price), qty: it.quantity, category: it.category })),
           subtotal: 0, discount: 0, tax: 0, total: Number(o.total),
-          method: 'cash', cashGiven: 0, change: 0,
+          // ⚠️ KRİTİK DÜZƆLİŞ: əvvəllər bura sərt-kodlanmış 'cash' idi —
+          // bütün tarixçə (onlayn ödənişlər daxil) yenidən yükləndikdə
+          // "nağd" kimi göstərilirdi. İndi DB-dəki HƆQİQİ dəyər oxunur:
+          method: o.method || 'cash', cashGiven: 0, change: 0,
           cashier: '', note: '', voided: o.status === 'ləğv',
           time: new Date(o.created_at).toLocaleString('az'),
           supabaseId: o.id,
@@ -1224,6 +1227,10 @@ export function AppProvider({ children }) {
         .insert({
           business_id: user.business_id, branch_id: activeBranchId, table_id: tableId,
           total: cartTotal, status: 'tamamlandı',
+          // ⚠️ KRİTİK DÜZƆLİŞ: ödəniş üsulu (nağd/kart) əvvəllər BURAYA
+          // HEÇ YAZILMIRDI — yalnız yerli yaddaşda idi, POS yenidən
+          // açılanda "nağd" kimi göstərilirdi (əslində kart olsa belə):
+          method,
           // "ofisiant/menecer öz hesabında sifariş aldısa, sifariş üzrə
           // onun adı yazılsın":
           staff_id: user.staff_account_id || null,
@@ -1294,6 +1301,7 @@ export function AppProvider({ children }) {
       const { error } = await supabase.from('orders').insert({
         business_id: user.business_id, branch_id: activeBranchId, table_id: tableId || null,
         total, status: 'tamamlandı',
+        method: 'online', // ⚠️ Eyni düzəliş — əvvəllər bura da yazılmırdı
         staff_id: null, staff_name: 'Onlayn (müştəri)',
       })
       if (error) console.error('Onlayn gəlir Supabase-ə yazılmadı:', error.message)

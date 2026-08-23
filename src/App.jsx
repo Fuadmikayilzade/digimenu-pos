@@ -9,6 +9,7 @@ import ConfirmDialog from './components/ConfirmDialog'
 import POSPage from './pages/POSPage'
 import KitchenPage from './pages/KitchenPage'
 import OrdersPage from './pages/OrdersPage'
+import ArchivePage from './pages/ArchivePage'
 import DashboardPage from './pages/DashboardPage'
 import ReportsPage from './pages/ReportsPage'
 import TableMapPage from './pages/TableMapPage'
@@ -69,6 +70,7 @@ function POS() {
         {view === 'pos'       && <POSPage />}
         {view === 'kitchen'   && <KitchenPage />}
         {view === 'orders'    && <OrdersPage />}
+        {view === 'archive'   && <ArchivePage />}
         {view === 'dashboard' && <DashboardPage />}
         {view === 'reports'   && <ReportsPage />}
         {view === 'tablemap'  && <TableMapPage />}
