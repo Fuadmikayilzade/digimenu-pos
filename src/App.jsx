@@ -39,7 +39,7 @@ function POS() {
     let timer
     const reset = () => {
       clearTimeout(timer)
-      timer = setTimeout(() => setLocked(true), 5 * 60 * 1000)
+      timer = setTimeout(() => setLocked(true), 30 * 1000)
     }
     const events = ['mousedown', 'keydown', 'touchstart']
     events.forEach(e => window.addEventListener(e, reset))
