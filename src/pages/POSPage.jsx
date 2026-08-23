@@ -38,6 +38,8 @@ export default function POSPage() {
   const handleReserveClick = (e, tableNumber) => {
     e.preventDefault()
     e.stopPropagation()
+    // ⚠️ Rezervasiya YALNIZ sahibkar/admin/menecer üçündür:
+    if (!can(user, 'reserve')) return
     setReserveModal({ open: true, table: tableNumber })
   }
 
@@ -85,23 +87,50 @@ export default function POSPage() {
               const ownerName = getTableOwnerName(n)
               const isLocked = occ && !canEditTable(n)
               return (
-                <button key={t.id}
-                  className={`table-btn${activeTable === n ? ' active' : ''}${occ ? ' occupied' : ''}${todayReservation ? ' has-reservation' : ''}${isLocked ? ' locked-by-other' : ''}`}
-                  onClick={() => { setActiveTable(n); setMobileSidebarOpen(false) }}
-                  onContextMenu={(e) => handleReserveClick(e, n)}
-                  title={
-                    isLocked ? `🔒 ${ownerName} tərəfindən idarə olunur`
-                    : todayReservation ? `Bugün rezerv: ${todayReservation.reserved_name}${todayReservation.phone ? ` (${todayReservation.phone})` : ''} — ${formatTime(todayReservation.reserved_time)} — sağ klik yeni rezervasiya üçün`
-                    : `${statusLabel[t.status] || t.status} — sağ klik rezervasiya üçün`
-                  }>
-                  <span className="table-num">M{t.display_label || t.number} {todayReservation ? '🔖' : ''} {isLocked ? '🔒' : ''}</span>
-                  <span className="table-sum">
-                    {sum > 0 ? `${sum.toFixed(0)}₼` : (statusLabel[t.status] || '—')}
-                  </span>
-                  {ownerName && occ && (
-                    <span className="table-owner">{ownerName}</span>
+                <div key={t.id} style={{ position: 'relative', display: 'flex' }}>
+                  <button
+                    className={`table-btn${activeTable === n ? ' active' : ''}${occ ? ' occupied' : ''}${todayReservation ? ' has-reservation' : ''}${isLocked ? ' locked-by-other' : ''}`}
+                    onClick={() => { setActiveTable(n); setMobileSidebarOpen(false) }}
+                    onContextMenu={(e) => handleReserveClick(e, n)}
+                    style={{ flex: 1, width: '100%' }}
+                    title={
+                      isLocked ? `🔒 ${ownerName} tərəfindən idarə olunur`
+                      : todayReservation ? `Bugün rezerv: ${todayReservation.reserved_name}${todayReservation.phone ? ` (${todayReservation.phone})` : ''} — ${formatTime(todayReservation.reserved_time)}`
+                      : statusLabel[t.status] || t.status
+                    }>
+                    <span className="table-num">M{t.display_label || t.number} {todayReservation ? '🔖' : ''} {isLocked ? '🔒' : ''}</span>
+                    <span className="table-sum">
+                      {sum > 0 ? `${sum.toFixed(0)}₼` : (statusLabel[t.status] || '—')}
+                    </span>
+                    {ownerName && occ && (
+                      <span className="table-owner">{ownerName}</span>
+                    )}
+                  </button>
+
+                  {/* ⚠️ MOBİL/TOXUNMA DÜZƆLİŞİ: rezervasiya əvvəllər YALNIZ
+                      sağ-klik ilə açılırdı — bu, mobil/planşet ekranlarda
+                      İSTİFADƆ OLUNA BİLMƆZ idi (toxunma ekranlarında
+                      "sağ-klik" anlayışı yoxdur). İndi əlavə, aydın
+                      görünən bir düymə var — yalnız icazəsi olanlar
+                      (sahibkar/admin/menecer) görür:
+                      */}
+                  {can(user, 'reserve') && (
+                    <button
+                      onClick={(e) => handleReserveClick(e, n)}
+                      title="Rezervasiya et"
+                      style={{
+                        position: 'absolute', top: 4, right: 4,
+                        width: 22, height: 22, borderRadius: 6,
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg2)', color: 'var(--gray)',
+                        fontSize: 11, cursor: 'pointer', padding: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        zIndex: 2,
+                      }}>
+                      📅
+                    </button>
                   )}
-                </button>
+                </div>
               )
             })}
           </div>
@@ -228,8 +257,8 @@ export default function POSPage() {
         open={reserveModal.open}
         tableNumber={reserveModal.table}
         onClose={() => setReserveModal({ open: false, table: null })}
-        onConfirm={(name, phone, date, time) => {
-          createReservation(reserveModal.table, name, phone, date, time)
+        onConfirm={(name, phone, date, time, note) => {
+          createReservation(reserveModal.table, name, phone, date, time, note)
           setReserveModal({ open: false, table: null })
         }}
       />

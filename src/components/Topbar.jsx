@@ -3,7 +3,6 @@ import { useApp } from '../context/AppContext'
 import { can } from '../utils/constants'
 import { fmt } from '../utils/helpers'
 import { supabase } from '../utils/supabaseClient'
-import Clock from './Clock'
 import PasswordInput from './PasswordInput'
 import PendingOrdersPanel from './PendingOrdersPanel'
 
@@ -11,7 +10,9 @@ const NAV_ITEMS = [
   { k: 'pos',       label: 'POS',    icon: '🛒', role: 'pos'     },
   { k: 'kitchen',   label: 'Mətbəx', icon: '🍳', role: 'kitchen' },
   { k: 'orders',    label: 'Çeklər', icon: '📋', role: 'pos'     },
-  { k: 'archive',   label: 'Arxiv',  icon: '🗄️', role: 'reports' },
+  // ⚠️ "Arxiv" bölməsi silindi — funksiyası artıq "Çeklər" bölməsinin
+  // öz daxilindədir (kalendardan tarix seçmə ilə):
+  { k: 'reservations', label: 'Rezervasiyalar', icon: '📅', role: 'reserve' },
   { k: 'dashboard', label: 'Statistika', icon: '📊', role: 'reports' },
   { k: 'reports',   label: 'Hesabat', icon: '📈', role: 'reports' },
 ]
@@ -31,6 +32,12 @@ function useIsMobile() {
   }, [])
   return isMobile
 }
+
+// ⚠️ QEYD: bu funksiya əvvəllər "yığcam rejim" üçün istifadə olunurdu
+// (bölmə adlarını gizlədirdi) — istifadəçinin xahişi ilə bu davranış
+// LƆĞV EDİLDİ, adlar həmişə görünür. Sıxlıq problemi əvəzinə aşağıdaki
+// CSS-də daha çox boşluq (gap/padding) və ehtiyat üçün üfüqi sürüşmə
+// ilə həll olunur.
 
 function copyPayLink(slug, tableNum) {
   if (!slug) { alert('Biznes slug tapılmadı'); return }
@@ -97,7 +104,7 @@ export default function Topbar() {
           <div className="topbar-nav">
             {allowedNavItems.map(n => (
               <button key={n.k} className={`nav-btn${view===n.k?' active':''}`}
-                onClick={() => setView(n.k)}>
+                onClick={() => setView(n.k)} title={n.label}>
                 {n.icon} {n.label}
                 {n.k==='kitchen' && ticketCount>0 && (
                   <span style={{ marginLeft:3, background:'var(--amber)', color:'var(--bg)', borderRadius:4, padding:'0 4px', fontSize:9, fontWeight:700 }}>{ticketCount}</span>
@@ -107,13 +114,12 @@ export default function Topbar() {
           </div>
         )}
 
-        {/* Statistika — mobildə gizlənir */}
+        {/* ⚠️ İstifadəçinin xahişi ilə geri qaytarıldı — statistika/saat
+            həmişə görünür, yığcam rejimdə gizlədilmir: */}
         <div className="topbar-stats">
           <div className="stat-chip green"><span>₼</span><span className="val">{fmt(todaySales)}</span></div>
           <div className="stat-chip amber"><span>🪑</span><span className="val">{openTables}/{liveTables.length}</span></div>
         </div>
-
-        <Clock />
 
         {/* Sifarişlər — mobildə mətn gizlənir, sadəcə işarə/say qalır */}
         <PendingOrdersPanel />

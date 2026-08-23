@@ -1,50 +1,98 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { can } from '../utils/constants'
 import { fmt } from '../utils/helpers'
+import { supabase } from '../utils/supabaseClient'
 
+// ⚠️ BİRLƆŞDİRMƆ: əvvəllər ayrıca "Arxiv" adlı bir bölmə var idi —
+// istifadəçinin xahişi ilə bu, Çeklər bölməsinin İÇİNƆ (bura) daşındı.
+// Tarix seçilməyibsə (dateFilter boşdur) — CARİ SESSİYANIN çekləri
+// göstərilir (əvvəlki davranış, yerli `orders` state-i). Tarix
+// seçiləndə — həmin tarixin BÜTÜN çekləri birbaşa Supabase-dən
+// gətirilir (keçmiş günlər daxil):
 export default function OrdersPage() {
-  const { user, orders, deleteOrder, setShowReceipt } = useApp()
+  const { user, orders, deleteOrder, setShowReceipt, activeBranchId } = useApp()
 
   const [search, setSearch]       = useState('')
   const [filter, setFilter]       = useState('all')
+  const [dateFilter, setDateFilter] = useState('') // boşdursa — cari sessiya
+  const [remoteOrders, setRemoteOrders] = useState([])
+  const [loadingRemote, setLoadingRemote] = useState(false)
 
-  // ⚠️ ƏVVƆLKİ KOD burada köhnə, artıq İSTİFADƆ OLUNMAYAN bir backend-dən
-  // (`api.orders.list` — Supabase-ə keçmədən ƏVVƆLKİ Node/Express server)
-  // məlumat çəkib yerli (düzgün) `orders` siyahısının ÜSTÜNDƆN YAZIRDI.
-  // Həmin köhnə backend masa nömrələrini "görünən ad" sistemindən XƆBƆRSİZ
-  // saxladığı üçün (məs. daxili "29" ƆVƆZİNƆ "görünən ad" olan "6"),
-  // Çeklər bölməsində YANLIŞ masa nömrəsi və ödəniş metodu görünürdü.
-  // İndi sistem TAM Supabase-əsaslı olduğu üçün bu köhnə çağırış tamamilə
-  // silindi — göstərilən data birbaşa (və YALNIZ) düzgün doldurulmuş yerli
-  // `orders` state-indən gəlir (bax: confirmPayment, recordOnlineRevenue):
+  const loadByDate = useCallback(async (date) => {
+    if (!user?.business_id || !date) return
+    setLoadingRemote(true)
+    const fromISO = new Date(date + 'T00:00:00').toISOString()
+    const toISO = new Date(date + 'T23:59:59').toISOString()
+    let q = supabase
+      .from('orders')
+      .select('*, order_items(*), tables(number)')
+      .eq('business_id', user.business_id)
+      .gte('created_at', fromISO)
+      .lte('created_at', toISO)
+      .order('created_at', { ascending: false })
+    q = activeBranchId ? q.eq('branch_id', activeBranchId) : q.is('branch_id', null)
+    const { data, error } = await q
+    setLoadingRemote(false)
+    if (error) { console.error('Arxiv sorğusu uğursuz oldu:', error.message); setRemoteOrders([]); return }
+    setRemoteOrders((data || []).map(o => ({
+      id: o.id, table: o.tables?.number || '-',
+      items: (o.order_items || []).map(it => ({ name: it.name || '', price: Number(it.price), qty: it.quantity, category: it.category })),
+      subtotal: Number(o.total), discount: 0, tax: 0, total: Number(o.total),
+      method: o.method || 'cash', cashGiven: 0, change: 0,
+      cashier: o.staff_name || '', note: '', voided: o.status === 'ləğv',
+      time: new Date(o.created_at).toLocaleString('az'),
+      supabaseId: o.id,
+    })))
+  }, [user, activeBranchId])
 
-  const filtered = useMemo(() => orders.filter(o => {
+  useEffect(() => {
+    if (dateFilter) loadByDate(dateFilter)
+  }, [dateFilter, loadByDate])
+
+  // Hansı data mənbəyinin göstəriləcəyi — tarix seçilibsə uzaqdan,
+  // deyilsə cari sessiyadan:
+  const sourceOrders = dateFilter ? remoteOrders : orders
+
+  const filtered = useMemo(() => sourceOrders.filter(o => {
     const q = search.toLowerCase()
     const matchSearch = !q || o.id.toLowerCase().includes(q) || String(o.table).includes(q)
     const matchFilter = filter === 'all' || (filter === 'paid' && !o.voided) || (filter === 'void' && o.voided)
     return matchSearch && matchFilter
-  }), [orders, search, filter])
+  }), [sourceOrders, search, filter])
 
-  const paid = orders.filter(o => !o.voided)
+  const paid = sourceOrders.filter(o => !o.voided)
   const total = paid.reduce((s, o) => s + o.total, 0)
 
   return (
     <div className="full-col">
       <div className="orders-page">
 
-        {/* Bu siyahı YALNIZ hazırkı iş sessiyasında POS-dan keçən çekləri
-            göstərir (səhifə yenilənəndə sıfırlanır) — köhnə tarix/filial
-            seçimi artıq mövcud olmayan bir backend-ə bağlı idi, silindi: */}
-        <div className="date-toolbar">
-          <span style={{ fontSize: 12, color: 'var(--gray2)' }}>📋 Bu sessiyanın çekləri ({orders.length})</span>
+        {/* ⚠️ YENİ: kalendardan tarix seçib, o günün BÜTÜN çeklərinə
+            baxmaq (əvvəlki "Arxiv" bölməsinin funksiyası): */}
+        <div className="date-toolbar" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: 'var(--gray2)' }}>
+            {dateFilter ? `📅 ${dateFilter} tarixinin çekləri` : `📋 Bu sessiyanın çekləri`} ({sourceOrders.length})
+          </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--white)', fontSize: 12 }}
+            />
+            {dateFilter && (
+              <button onClick={() => setDateFilter('')}
+                style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--gray2)', fontSize: 12, cursor: 'pointer' }}>
+                Cari sessiyaya qayıt
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Summary cards */}
         <div className="orders-summary">
           <div className="summary-card">
             <div className="summary-label">Ümumi Çek</div>
-            <div className="summary-val">{orders.length}</div>
+            <div className="summary-val">{sourceOrders.length}</div>
           </div>
           <div className="summary-card">
             <div className="summary-label">Ödənilmiş</div>
@@ -52,7 +100,7 @@ export default function OrdersPage() {
           </div>
           <div className="summary-card">
             <div className="summary-label">Ləğv Edilmiş</div>
-            <div className="summary-val" style={{ color: 'var(--red)' }}>{orders.filter(o => o.voided).length}</div>
+            <div className="summary-val" style={{ color: 'var(--red)' }}>{sourceOrders.filter(o => o.voided).length}</div>
           </div>
           <div className="summary-card">
             <div className="summary-label">Cəmi Gəlir</div>
@@ -72,7 +120,9 @@ export default function OrdersPage() {
         </div>
 
         {/* Table */}
-        {!filtered.length
+        {loadingRemote
+          ? <div className="orders-empty"><p>Yüklənir...</p></div>
+          : !filtered.length
           ? <div className="orders-empty">
               <div style={{ fontSize: '2.5rem', marginBottom: 10, opacity: .3 }}>📋</div>
               <p>Çek tapılmadı</p>
@@ -106,7 +156,7 @@ export default function OrdersPage() {
                       <div className="order-actions">
                         <button className="action-btn view" onClick={() => setShowReceipt(o)}>👁 Bax</button>
                         <button className="action-btn print" onClick={() => setShowReceipt(o)}>🖨</button>
-                        {can(user, 'delete') && (
+                        {can(user, 'delete') && !dateFilter && (
                           <button className="action-btn del" onClick={() => deleteOrder(o.id)}>🗑</button>
                         )}
                       </div>

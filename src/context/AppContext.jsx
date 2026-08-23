@@ -1037,12 +1037,12 @@ export function AppProvider({ children }) {
 
   useEffect(() => { loadReservations() }, [loadReservations])
 
-  async function createReservation(tableNumber, reservedName, phone, reservedDate, reservedTime) {
+  async function createReservation(tableNumber, reservedName, phone, reservedDate, reservedTime, note) {
     if (!user?.business_id) return
     const { error } = await supabase.from('reservations').insert({
       business_id: user.business_id, branch_id: activeBranchId,
       table_number: String(tableNumber), reserved_name: reservedName, phone: phone || null,
-      reserved_date: reservedDate, reserved_time: reservedTime || null,
+      reserved_date: reservedDate, reserved_time: reservedTime || null, note: note || null,
     })
     if (error) {
       console.error('Rezervasiya yazılmadı:', error.message)
@@ -1051,6 +1051,23 @@ export function AppProvider({ children }) {
     }
     loadReservations()
     toast(`Masa ${getTableLabel(tableNumber)} — ${reservedDate} tarixinə rezerv edildi (${reservedName})`)
+  }
+
+  // ⚠️ YENİ: Rezervasiya Siyahısı bölməsi üçün — mövcud rezervasiyanı
+  // redaktə etmək (yalnız sahibkar/menecer, `can(user, 'reserve')` ilə
+  // qapılıb, bax: ReservationsPage.jsx):
+  async function updateReservation(id, { tableNumber, reservedName, phone, reservedDate, reservedTime, note }) {
+    const { error } = await supabase.from('reservations').update({
+      table_number: String(tableNumber), reserved_name: reservedName, phone: phone || null,
+      reserved_date: reservedDate, reserved_time: reservedTime || null, note: note || null,
+    }).eq('id', id)
+    if (error) {
+      console.error('Rezervasiya yenilənmədi:', error.message)
+      toast('Rezervasiya yenilənmədi', 'error')
+      return
+    }
+    loadReservations()
+    toast('Rezervasiya yeniləndi ✓')
   }
 
   async function deleteReservation(id) {
@@ -1448,7 +1465,7 @@ export function AppProvider({ children }) {
   const value = {
     user, handleLogin, handleLogout, business: user?.business_name ? { slug: user?.business_slug, name: user?.business_name } : null,
     branches, activeBranchId, setActiveBranchId, liveTables, loadLiveTables, getTableLabel,
-    reservations, todaysReservationByTable, createReservation, deleteReservation,
+    reservations, todaysReservationByTable, createReservation, updateReservation, deleteReservation, loadReservations,
     view, setView, activeCat, setActiveCat, search, setSearch,
     activeTable, setActiveTable,
     menuItems, filteredMenu, catCounts, dynamicCategories, loading,

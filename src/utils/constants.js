@@ -20,6 +20,9 @@ export const CAN = {
   // (ofisiant, menecer, mətbəx) bu bölmələri görməməlidir:
   reports: ['owner', 'admin'],
   discount:['owner', 'admin', 'manager'],
+  // Rezervasiya YALNIZ sahibkar/admin/menecer üçündür — ofisiant/mətbəx
+  // işçisi bu funksiyaya toxuna bilməz:
+  reserve: ['owner', 'admin', 'manager'],
   kitchen: ['owner', 'admin', 'manager', 'waiter', 'kitchen'],
   pos:     ['owner', 'admin', 'manager', 'waiter'],
   // Bildiriş panelindəki mesajları silmək YALNIZ sahibkar/admin/menecer

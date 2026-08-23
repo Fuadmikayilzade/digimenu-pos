@@ -10,6 +10,7 @@ import POSPage from './pages/POSPage'
 import KitchenPage from './pages/KitchenPage'
 import OrdersPage from './pages/OrdersPage'
 import ArchivePage from './pages/ArchivePage'
+import ReservationsPage from './pages/ReservationsPage'
 import DashboardPage from './pages/DashboardPage'
 import ReportsPage from './pages/ReportsPage'
 import TableMapPage from './pages/TableMapPage'
@@ -71,6 +72,7 @@ function POS() {
         {view === 'kitchen'   && <KitchenPage />}
         {view === 'orders'    && <OrdersPage />}
         {view === 'archive'   && <ArchivePage />}
+        {view === 'reservations' && <ReservationsPage />}
         {view === 'dashboard' && <DashboardPage />}
         {view === 'reports'   && <ReportsPage />}
         {view === 'tablemap'  && <TableMapPage />}
