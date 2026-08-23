@@ -1,6 +1,24 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron')
 const path = require('path')
+const fs = require('fs')
 const { autoUpdater } = require('electron-updater')
+
+// ⚠️ MÜVƆQQƆTİ DİAQNOSTİKA: pəncərələr bəzən görünməyə bilir (erkən
+// xəta, sinxron istisna və s.) — bunun əvəzinə hər addımı bir LOG
+// FAYLINA yazırıq. Bu fayl həmişə yazılır, dialoq göstərmə uğursuz
+// olsa belə:
+const logFilePath = path.join(app.getPath('userData'), 'update-log.txt')
+function logToFile(msg) {
+  try {
+    const line = `[${new Date().toISOString()}] ${msg}\n`
+    fs.appendFileSync(logFilePath, line)
+  } catch (e) {
+    // log yazıla bilmirsə belə tətbiqi çökdürmə
+  }
+}
+logToFile('=== Tətbiq başladı ===')
+logToFile('app.isPackaged: ' + app.isPackaged)
+logToFile('app.getVersion(): ' + app.getVersion())
 
 // ⚠️ "Mətbəx rejimi": tətbiq --kitchen bayrağı ilə açılsa (qısayolda
 // təyin edilir), avtomatik olaraq mətbəx ekranına keçir və tam ekran
@@ -19,10 +37,10 @@ function createWindow() {
     fullscreen: isKitchenMode, // mətbəx rejimində avtomatik tam ekran
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
-      // ⚠️ DÜZƏLİŞ: bura əvvəllər "preload.js" yazılmışdı, amma fayl
+      // ⚠️ DÜZƆLİŞ: bura əvvəllər "preload.js" yazılmışdı, amma fayl
       // artıq "preload.cjs" adlanır (ES module/CommonJS münaqişəsi
       // düzəldilərkən adı dəyişdirilmişdi) — bu uyğunsuzluq preload
-      // skriptinin SƏSSİZCƏ heç yüklənməməsinə səbəb olurdu:
+      // skriptinin SƆSSİZCƆ heç yüklənməməsinə səbəb olurdu:
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
@@ -31,7 +49,21 @@ function createWindow() {
   })
 
   // Menyu çubuğunu sadələşdiririk (real POS-da lazımsız "File/Edit" və s. olmasın):
-  Menu.setApplicationMenu(null)
+  // ⚠️ MÜVƆQQƆTİ: tam boş menyu əvəzinə, log qovluğunu açan bir
+  // düymə qoyuruq ki, diaqnostika faylını tapmaq asan olsun:
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: 'Kömək',
+      submenu: [
+        {
+          label: 'Diaqnostika faylını aç',
+          click: () => {
+            require('electron').shell.showItemInFolder(logFilePath)
+          },
+        },
+      ],
+    },
+  ]))
 
   const indexPath = path.join(__dirname, '..', 'dist', 'index.html')
   const url = isKitchenMode
@@ -50,12 +82,28 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow()
+  logToFile('Pəncərə yaradıldı, yenilənmə yoxlanılır...')
 
-  // ⚠️ AVTOMATİK YENİLƏNMƏ: tətbiq açılan kimi yeni versiya olub-olmadığını
+  // ⚠️ AVTOMATİK YENİLƆNMƆ: tətbiq açılan kimi yeni versiya olub-olmadığını
   // yoxlayır. Tapılarsa arxa planda yükləyir, hazır olanda istifadəçidən
   // "indi yenidən başladım" təsdiqi alır (işin ortasında sürprizlə
   // yenidən başlamasın deyə):
-  autoUpdater.checkForUpdatesAndNotify()
+  //
+  // ⚠️ try/catch ƏLAVƆ OLUNDU: heç bir hadisənin (nə "yoxlanılır", nə
+  // "xəta") baş vermədiyi halda, bu, çox güman ki, SİNXRON bir istisnadır
+  // — belə bir xəta `autoUpdater.on('error', ...)` handler-inə HEÇ
+  // ÇATMIR, çünki o, yalnız ASİNXRON (promise-daxili) xətaları tutur:
+  try {
+    autoUpdater.checkForUpdatesAndNotify()
+      .then((result) => {
+        logToFile('checkForUpdatesAndNotify NƆTİCƆ: ' + JSON.stringify(result?.updateInfo?.version || 'nəticə yoxdur'))
+      })
+      .catch((err) => {
+        logToFile('checkForUpdatesAndNotify PROMISE XƆTASI: ' + (err?.stack || err?.message || String(err)))
+      })
+  } catch (syncErr) {
+    logToFile('checkForUpdatesAndNotify SİNXRON İSTİSNA: ' + (syncErr?.stack || syncErr?.message || String(syncErr)))
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -67,7 +115,37 @@ app.on('window-all-closed', () => {
 })
 
 // ── Avtomatik yenilənmə hadisələri ─────────────────────────────────
+// ⚠️ MÜVƆQQƆTİ DİAQNOSTİKA: hər addımı görünən etdik ki, "niyə sual
+// gəlmədi" sualının cavabını tapaq. Hər şey düzgün işlədikdən sonra
+// bu bildirişləri sadələşdirə bilərik (istifadəçini narahat etməsin
+// deyə):
+autoUpdater.on('checking-for-update', () => {
+  console.log('🔄 Yenilənmə yoxlanılır...')
+  logToFile('HADİSƆ: checking-for-update')
+})
+
+autoUpdater.on('update-available', (info) => {
+  console.log('✅ Yeni versiya tapıldı:', info.version)
+  logToFile('HADİSƆ: update-available, versiya=' + info.version)
+})
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('ℹ️ Yenilənmə yoxdur, cari versiya:', info.version)
+  logToFile('HADİSƆ: update-not-available, versiya=' + info.version)
+  dialog.showMessageBox({
+    type: 'info',
+    title: 'Diaqnostika',
+    message: `Yenilənmə yoxlanıldı. Cari versiya: ${app.getVersion()}. GitHub-dakı son versiya bundan yeni deyil (və ya tapılmadı).`,
+  })
+})
+
+autoUpdater.on('download-progress', (progress) => {
+  console.log(`⬇️ Yüklənir: ${Math.round(progress.percent)}%`)
+  logToFile('HADİSƆ: download-progress ' + Math.round(progress.percent) + '%')
+})
+
 autoUpdater.on('update-downloaded', () => {
+  logToFile('HADİSƆ: update-downloaded')
   dialog.showMessageBox({
     type: 'info',
     title: 'Yeni versiya hazırdır',
@@ -80,13 +158,22 @@ autoUpdater.on('update-downloaded', () => {
 
 autoUpdater.on('error', (err) => {
   console.error('Avtomatik yenilənmə xətası:', err)
+  logToFile('HADİSƆ: error — ' + (err?.stack || err?.message || String(err)))
+  // ⚠️ ƏVVƆLLƆR yalnız console.error idi — paketlənmiş tətbiqdə konsol
+  // görünmədiyi üçün istifadəçi (və biz) heç vaxt bu xətanı görə
+  // bilmirdik. İndi görünən bir pəncərədə göstərilir:
+  dialog.showMessageBox({
+    type: 'error',
+    title: 'Yenilənmə xətası',
+    message: 'Yenilənməni yoxlayarkən xəta baş verdi:\n' + (err?.message || String(err)),
+  })
 })
 
 // Renderer prosesindən (React tərəfindən) "yenilənməni yoxla" çağırışı üçün:
 ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdatesAndNotify())
 ipcMain.handle('get-app-version', () => app.getVersion())
 
-// ⚠️ KRİTİK DÜZƏLİŞ: "This app does not support print preview" xətası
+// ⚠️ KRİTİK DÜZƆLİŞ: "This app does not support print preview" xətası
 // brauzerdəki adi `window.open()+window.print()` üsulunun Electron-da
 // düzgün işləməməsindən qaynaqlanır — Electron "uşaq" pəncərələrdə
 // (window.open ilə açılanlarda) çapı tam dəstəkləmir. Bunun əvəzinə
