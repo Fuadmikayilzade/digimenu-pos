@@ -1,0 +1,31 @@
+name: Supabase Keepalive
+
+# ⚠️ Supabase-in pulsuz paketi 7 gün "sükut"dan sonra layihəni avtomatik
+# dayandırır. Bu, hər 3 gündə bir (7 günlük hədddən TƆHLÜKƆSİZ margin
+# ilə) sadə bir sorğu göndərib layihəni "aktiv" saxlayır.
+on:
+  schedule:
+    # "0 9 */3 * *" = hər 3 gündə bir, saat 09:00 UTC-də (Bakı vaxtı ilə ~13:00)
+    - cron: '0 9 */3 * *'
+  # İstəyəndə əl ilə də işə sala bilərsiniz (GitHub-un "Actions" tabından):
+  workflow_dispatch:
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Supabase-ə sorğu göndər
+        run: |
+          echo "Supabase layihəsinə sorğu göndərilir..."
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}")
+          echo "Cavab kodu: $response"
+          # 200-299 aralığı uğurlu sayılır (401/404 belə "layihə aktivdir" deməkdir,
+          # yalnız bağlantı tamamilə uğursuz olarsa problem var):
+          if [ "$response" -ge 200 ] && [ "$response" -lt 500 ]; then
+            echo "✅ Layihə aktivdir"
+          else
+            echo "⚠️ Gözlənilməyən cavab — layihəni əl ilə yoxlayın"
+            exit 1
+          fi
